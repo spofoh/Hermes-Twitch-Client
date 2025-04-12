@@ -17,15 +17,13 @@ import type {
   SubscribeRequest,
   UnsubscribeRequest,
   AuthenticateRequest,
-  HermesClientEvents, // Use this for type safety
+  HermesClientEvents,
   RetryFunction,
 } from './types';
 
-// Type assertion for EventEmitter to use our specific event map
 interface TypedEventEmitter<
   Events extends { [K in keyof Events]: (...args: any[]) => void }
 > extends EventEmitter {
-  // Overloads to maintain compatibility with base EventEmitter
   on<E extends keyof Events>(event: E, listener: Events[E]): this;
   on(event: string | symbol, listener: (...args: any[]) => void): this;
 
@@ -47,9 +45,9 @@ interface TypedEventEmitter<
 
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = Infinity;
 const DEFAULT_INITIAL_RECONNECT_DELAY_MS = 1000;
-const DEFAULT_MAX_RECONNECT_DELAY_MS = 30000; // 30 seconds
+const DEFAULT_MAX_RECONNECT_DELAY_MS = 30000;
 const DEFAULT_RECONNECT_BACKOFF_FACTOR = 2;
-const KEEPALIVE_GRACE_PERIOD_SEC = 5; // Grace period beyond server's keepalive timeout
+const KEEPALIVE_GRACE_PERIOD_SEC = 5;
 const MESSAGE_ID_CACHE_SIZE = 1000;
 
 export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<HermesClientEvents>) {
@@ -63,13 +61,10 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
   private keepaliveTimer: NodeJS.Timeout | null = null;
   private lastMessageId: string | null = null;
   private welcomeMessage: WelcomeMessage | null = null;
-  private reconnectUrl: string | null = null; // Overrides default URL if provided by welcome/reconnect
+  private reconnectUrl: string | null = null;
 
-  // Track active subscriptions: topic -> subscriptionId
   private activeSubscriptions: Map<string, string> = new Map();
-  // Simple message ID cache to prevent duplicates
   private messageIdCache: Set<string> = new Set();
-  // Buffer for messages sent before 'welcome'
   private outgoingBuffer: OutgoingMessage[] = [];
 
   constructor(options: HermesClientOptions) {
@@ -78,7 +73,7 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
       throw new Error('Twitch Client ID (clientId) is required.');
     }
     this.options = {
-      ...options, // Includes clientId, authToken?, wsOptions?
+      ...options,
       maxReconnectAttempts:
         options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS,
       initialReconnectDelayMs:
@@ -89,7 +84,6 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
         options.reconnectBackoffFactor ?? DEFAULT_RECONNECT_BACKOFF_FACTOR,
     };
 
-    // Increase max listeners slightly for potentially many subscriptions + internal handlers
     this.setMaxListeners(this.getMaxListeners() + 10);
   }
 
@@ -102,14 +96,13 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
       return;
     }
     this.connectionState = 'connecting';
-    this.reconnectAttempts = 0; // Reset attempts on manual connect
+    this.reconnectAttempts = 0;
     this._doConnect().catch((err) => {
-      // Initial connection failure
       this.emit(
         'error',
         new Error(`Initial connection failed: ${err.message}`)
       );
-      this._transitionToDisconnected(); // Ensure state is correct
+      this._transitionToDisconnected();
       // Optionally trigger automatic reconnect here if desired, or rely on user to call connect() again
       // this._scheduleReconnect();
     });
@@ -120,14 +113,12 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
       return;
     }
     this._transitionToDisconnected();
-    this._closeWebSocket(1000, 'Client requested disconnect'); // 1000 = Normal closure
+    this._closeWebSocket(1000, 'Client requested disconnect');
   }
 
   public get state(): ConnectionState {
     return this.connectionState;
   }
-
-  // --- Subscription Management ---
 
   public subscribe(topics: string | string[]): void {
     const topicsArray = Array.isArray(topics) ? topics : [topics];
@@ -138,14 +129,12 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
         continue;
       }
 
-      // Avoid duplicate active/pending subscriptions (simple check)
       if (this.activeSubscriptions.has(topic)) {
-        // console.warn(`Already subscribed to topic: ${topic}`); // Optional warning
         continue;
       }
 
       const requestId = randomUUID();
-      const subscriptionId = randomUUID(); // Pre-generate, associate on success
+      const subscriptionId = randomUUID();
 
       const message: SubscribeRequest = {
         id: requestId,
@@ -157,9 +146,6 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
         },
       };
 
-      // Temporary store potential mapping, confirmed in response handler
-      // In this simple fire-and-forget model, we might add optimistically
-      // or wait for the response. Waiting is safer. Let's just send.
       this._sendMessage(message);
     }
   }
@@ -176,15 +162,10 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
           unsubscribe: { id: subscriptionId },
         };
         this._sendMessage(message);
-        // Remove optimistically, or wait for confirmation? Let's remove optimistically.
         this.activeSubscriptions.delete(topic);
-      } else {
-        // console.warn(`Not subscribed to topic, cannot unsubscribe: ${topic}`); // Optional warning
       }
     }
   }
-
-  // --- Private Connection Logic ---
 
   private async _doConnect(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -202,10 +183,10 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
         return reject(new Error('Already connected or connecting'));
       }
 
-      this._cleanupSocket(); // Ensure any old socket is fully gone
+      this._cleanupSocket();
 
       const url = this.reconnectUrl || this._buildUrl();
-      this.reconnectUrl = null; // Consume the reconnect URL
+      this.reconnectUrl = null;
 
       try {
         this.ws = new WebSocket(url, this.options.wsOptions);
@@ -218,22 +199,20 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
             }`
           )
         );
-        this._scheduleReconnect(); // Attempt reconnect after creation failure
+        this._scheduleReconnect();
         return reject(err);
       }
 
       this.ws.on('open', () => {
-        if (this.ws?.readyState !== WebSocket.OPEN) return; // Guard against stale events
-        this.connectionState = 'connected'; // Tentative state, confirmed by 'welcome'
-        this.reconnectAttempts = 0; // Reset on successful open
-        // Don't emit 'ready' yet, wait for 'welcome'
-        // Flush buffer now that connection is open (before welcome/auth potentially)
+        if (this.ws?.readyState !== WebSocket.OPEN) return;
+        this.connectionState = 'connected';
+        this.reconnectAttempts = 0;
         this._flushBuffer();
-        resolve(); // Promise resolves on open
+        resolve();
       });
 
       this.ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
-        this._resetKeepaliveTimer(); // Activity detected
+        this._resetKeepaliveTimer();
         try {
           const parsed = JSON.parse(data.toString());
           this._handleIncomingMessage(parsed);
@@ -249,18 +228,15 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
       });
 
       this.ws.on('error', (error: Error) => {
-        // If the promise hasn't resolved yet (initial connection failed), reject it.
         if (this.connectionState === 'connecting') {
           reject(error);
         }
         this.emit('error', error);
-        // WS errors often precede 'close'. The 'close' handler handles reconnect logic.
       });
 
       this.ws.on('close', (code: number, reason: Buffer) => {
         const wasClean = code === 1000;
         const reasonString = reason.toString();
-        // If the promise hasn't resolved yet (initial connection failed), reject it.
         if (this.connectionState === 'connecting') {
           reject(
             new Error(
@@ -268,14 +244,13 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
             )
           );
         }
-        const previouslyConnected =
-          this.connectionState === 'connected' ||
-          this.connectionState === 'reconnecting';
-        this._cleanupSocket(); // Clears timers, WS instance
+        // const previouslyConnected =
+        //   this.connectionState === 'connected' ||
+        //   this.connectionState === 'reconnecting';
+        this._cleanupSocket();
 
-        // Only emit disconnect and attempt reconnect if we weren't already manually disconnected
         if (this.connectionState !== 'disconnected') {
-          this.connectionState = 'reconnecting'; // Assume reconnect unless told otherwise
+          this.connectionState = 'reconnecting';
           this.emit('disconnect', { code, reason, wasClean });
           this._scheduleReconnect();
         }
@@ -288,7 +263,6 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
       this.connectionState === 'disconnected' ||
       this.connectionState === 'connecting'
     ) {
-      // Don't schedule if manually disconnected or already trying initial connect
       return;
     }
     this.connectionState = 'reconnecting';
@@ -303,63 +277,54 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
       return;
     }
 
-    const retryOptions = {
-      retries: 1, // We manage retries externally, this just handles the delay
-      factor: this.options.reconnectBackoffFactor,
-      minTimeout: this.options.initialReconnectDelayMs,
-      maxTimeout: this.options.maxReconnectDelayMs,
-      randomize: true,
-      onRetry: (e: Error, attempt: number) => {
-        // This 'attempt' is from async-retry (always 2 here), use our counter
-        const delay = Math.min(
-          this.options.initialReconnectDelayMs *
-            Math.pow(
-              this.options.reconnectBackoffFactor,
-              this.reconnectAttempts - 1
-            ),
-          this.options.maxReconnectDelayMs
-        );
-        // Add jitter approx +/- 10%
-        const jitterDelay = Math.round(delay * (0.9 + Math.random() * 0.2));
-        this.emit('reconnecting', {
-          attempt: this.reconnectAttempts,
-          delay: jitterDelay,
-        });
-      },
-    };
+    // const retryOptions = {
+    //   retries: 1,
+    //   factor: this.options.reconnectBackoffFactor,
+    //   minTimeout: this.options.initialReconnectDelayMs,
+    //   maxTimeout: this.options.maxReconnectDelayMs,
+    //   randomize: true,
+    //   onRetry: (e: Error, attempt: number) => {
+    //     const delay = Math.min(
+    //       this.options.initialReconnectDelayMs *
+    //         Math.pow(
+    //           this.options.reconnectBackoffFactor,
+    //           this.reconnectAttempts - 1
+    //         ),
+    //       this.options.maxReconnectDelayMs
+    //     );
+    //     const jitterDelay = Math.round(delay * (0.9 + Math.random() * 0.2));
+    //     this.emit('reconnecting', {
+    //       attempt: this.reconnectAttempts,
+    //       delay: jitterDelay,
+    //     });
+    //   },
+    // };
 
-    // Cast retry to the helper type to avoid TS issues with async-retry types
     const retryExecutor = retry as RetryFunction;
 
     retryExecutor(async (bail) => {
       if (this.connectionState === 'disconnected') {
-        bail(new Error('Client disconnected manually.')); // Stop retrying
+        bail(new Error('Client disconnected manually.'));
         return;
       }
       try {
         await this._doConnect();
-        // If _doConnect succeeds, the retry loop is exited.
       } catch (error) {
-        // _doConnect failed, retry will schedule the next attempt
-        throw error; // Throw error to trigger retry
+        throw error;
       }
     }).catch(() => {
-      // This catch is primarily for the 'bail' case or if retry itself fails unexpectedly
       if (this.connectionState !== 'disconnected') {
-        // If we bailed due to max attempts or another reason, but aren't disconnected, log error.
         this.emit(
           'error',
           new Error('Reconnect retry loop exited unexpectedly.')
         );
-        this.disconnect(); // Go to fully disconnected state
+        this.disconnect();
       }
     });
   }
 
   private _buildUrl(): string {
     const params = new URLSearchParams({ clientId: this.options.clientId });
-    // Append lastMessageId ONLY if we have a recoveryUrl (handled in _doConnect)
-    // Do not append it to the base URL.
     return `wss://hermes.twitch.tv/v1?${params.toString()}`;
   }
 
@@ -374,28 +339,25 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
       this.keepaliveTimer = null;
     }
     if (this.ws) {
-      // Remove all listeners to prevent memory leaks and processing stale events
       this.ws.removeAllListeners();
-      // Only close if not already closed/closing
       if (
         this.ws.readyState !== WebSocket.CLOSED &&
         this.ws.readyState !== WebSocket.CLOSING
       ) {
         try {
-          this.ws.close(1001, 'Client cleaning up'); // 1001 = Going Away
+          this.ws.close(1001, 'Client cleaning up');
         } catch (e) {
-          /* Ignore closure errors during cleanup */
+          this.emit(
+            'error',
+            new Error(`Error closing WebSocket: ${(e as Error).message}`)
+          );
         }
       }
       this.ws = null;
     }
     this.welcomeMessage = null;
     this.lastMessageId = null;
-    // Clear buffer on disconnect? Or keep for next connection? Let's clear.
     this.outgoingBuffer = [];
-    // Optionally clear cache on disconnect? Browser code didn't seem to clear everything.
-    // this.messageIdCache.clear();
-    // this.activeSubscriptions.clear(); // Keep subs, try to resubscribe on reconnect implicitly? Or require user? Assume implicit for now.
   }
 
   private _closeWebSocket(code?: number, reason?: string): void {
@@ -409,10 +371,8 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
         );
       }
     }
-    this.ws = null; // Ensure it's nulled even if close throws
+    this.ws = null;
   }
-
-  // --- Private Message Handling ---
 
   private _handleIncomingMessage(message: any): void {
     if (
@@ -431,21 +391,17 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
         'unknownMessage',
         Buffer.from(JSON.stringify(message)),
         message
-      ); // Emit raw and parsed if possible
+      );
       return;
     }
 
-    // Deduplication
     if (this.messageIdCache.has(message.id)) {
-      // console.warn(`Received duplicate message ID: ${message.id}`); // Optional warning
       return;
     }
     this._addMessageIdToCache(message.id);
 
-    // Store last ID for potential recovery
     this.lastMessageId = message.id;
 
-    // Route based on type
     switch (message.type) {
       case 'welcome':
         this._handleWelcome(message as WelcomeMessage);
@@ -482,7 +438,6 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
           'authenticateResponse',
           message as AuthenticateResponseMessage
         );
-        // Could update internal auth state here if needed
         break;
       case 'subscriptionRevocation':
         this._handleSubscriptionRevocation(
@@ -507,30 +462,25 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
 
   private _handleWelcome(message: WelcomeMessage): void {
     this.welcomeMessage = message;
-    this.reconnectUrl = message.welcome.recoveryUrl; // Store for future reconnects
+    this.reconnectUrl = message.welcome.recoveryUrl;
     this.emit('welcome', message);
-    this._resetKeepaliveTimer(); // Start keepalive based on server interval
+    this._resetKeepaliveTimer();
 
-    // If authenticated, send auth message now
     if (this.options.authToken) {
       this._attemptAuthentication();
     }
 
-    // Flush any buffered messages (e.g., subscriptions sent before welcome)
     this._flushBuffer();
 
-    // Re-subscribe to topics we think we should be subscribed to
     this._resubscribeActiveTopics();
 
-    // Connection is now fully ready
     this.emit('ready');
   }
 
   private _handleReconnect(message: ReconnectMessage): void {
     this.emit('reconnect', message);
-    this.reconnectUrl = message.reconnect.url; // Use this specific URL for the next immediate attempt
-    this._closeWebSocket(1012, 'Server requested reconnect'); // 1012 = Service Restart
-    // The 'close' event handler will trigger _scheduleReconnect, which will use the reconnectUrl
+    this.reconnectUrl = message.reconnect.url;
+    this._closeWebSocket(1012, 'Server requested reconnect');
   }
 
   private _handleSubscribeResponse(message: SubscribeResponseMessage): void {
@@ -539,17 +489,12 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
     const topic = subInfo?.pubsub?.topic;
 
     if (message.subscribeResponse.result === 'ok' && subInfo?.id && topic) {
-      // Success! Store the mapping
       this.activeSubscriptions.set(topic, subInfo.id);
     } else if (topic) {
-      // Failed - ensure it's not in our active list
       const activeSubId = this.activeSubscriptions.get(topic);
       if (activeSubId === subInfo?.id) {
-        // Check if the failed ID matches our stored one
         this.activeSubscriptions.delete(topic);
       }
-      // Could emit a specific subscription error event
-      // this.emit('subscriptionError', { topic, error: message.subscribeResponse });
     }
   }
 
@@ -558,19 +503,16 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
   ): void {
     this.emit('subscriptionRevocation', message);
     const revokedSubId = message.subscriptionRevocation.subscription.id;
-    // Find the topic associated with this ID and remove it
     for (const [topic, subId] of this.activeSubscriptions.entries()) {
       if (subId === revokedSubId) {
         this.activeSubscriptions.delete(topic);
-        // Could emit specific notification: this.emit('subscriptionEnded', { topic, reason: message.subscriptionRevocation.reason });
-        break; // Assuming IDs are unique
+        break;
       }
     }
   }
 
   private _resubscribeActiveTopics(): void {
     const topicsToResubscribe = Array.from(this.activeSubscriptions.keys());
-    // Clear current knowledge, we'll repopulate on success responses
     this.activeSubscriptions.clear();
     if (topicsToResubscribe.length > 0) {
       this.subscribe(topicsToResubscribe);
@@ -592,7 +534,6 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
             new Error(`Keepalive timeout (${timeoutMs}ms). Reconnecting.`)
           );
           this._closeWebSocket(1001, 'Keepalive timeout');
-          // Close handler will trigger reconnect
         }
       }, timeoutMs);
     }
@@ -600,7 +541,6 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
 
   private _addMessageIdToCache(id: string): void {
     if (this.messageIdCache.size >= MESSAGE_ID_CACHE_SIZE) {
-      // Evict the oldest (approximated by iteration order)
       const oldestId = this.messageIdCache.values().next().value;
       if (oldestId) {
         this.messageIdCache.delete(oldestId);
@@ -608,8 +548,6 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
     }
     this.messageIdCache.add(id);
   }
-
-  // --- Private Sending Logic ---
 
   private _attemptAuthentication(): void {
     if (!this.options.authToken) {
@@ -624,11 +562,10 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
       type: 'authenticate',
       authenticate: { token: this.options.authToken },
     };
-    this._sendMessage(message, true); // Prioritize auth message
+    this._sendMessage(message, true);
   }
 
   private _sendMessage(message: OutgoingMessage, prioritize = false): void {
-    // Buffer if not ready (connected + welcome received)
     if (
       this.connectionState !== 'connected' ||
       !this.welcomeMessage ||
@@ -636,9 +573,9 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
       this.ws.readyState !== WebSocket.OPEN
     ) {
       if (prioritize) {
-        this.outgoingBuffer.unshift(message); // Add to front
+        this.outgoingBuffer.unshift(message);
       } else {
-        this.outgoingBuffer.push(message); // Add to back
+        this.outgoingBuffer.push(message);
       }
       return;
     }
@@ -651,8 +588,7 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
             'error',
             new Error(`Failed to send message: ${error.message}`)
           );
-          // Should we re-buffer? Or assume connection is dead? Assume dead.
-          this._closeWebSocket(1011, `Send error: ${error.message}`); // 1011 = Internal Error
+          this._closeWebSocket(1011, `Send error: ${error.message}`);
         }
       });
     } catch (e) {
@@ -667,9 +603,9 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
 
   private _flushBuffer(): void {
     const buffer = this.outgoingBuffer;
-    this.outgoingBuffer = []; // Clear buffer immediately
+    this.outgoingBuffer = [];
     for (const msg of buffer) {
-      this._sendMessage(msg); // Resend through the proper channel (will send if ready, re-buffer if not)
+      this._sendMessage(msg);
     }
   }
 }
