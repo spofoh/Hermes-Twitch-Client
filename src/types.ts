@@ -66,8 +66,20 @@ export interface SubscribeResponseMessage extends BaseIncomingMessage {
   type: 'subscribeResponse';
   subscribeResponse: {
     result: 'ok' | 'error' | string;
-    errorCode?: string | 'SUB004' | 'SUB007';
+    errorCode?: 'SUB004' | 'SUB007' | string;
     error?: 'unauthorized' | string;
+    subscription: {
+      id: string;
+    };
+  };
+}
+
+export interface UnSubscribeResponseMessage extends BaseIncomingMessage {
+  type: 'unsubscribeResponse';
+  unsubscribeResponse: {
+    result: 'ok' | 'error' | string;
+    errorCode?: 'UNSUB001' | string;
+    error?: string;
     subscription: {
       id: string;
     };
@@ -88,6 +100,7 @@ export type IncomingMessage =
   | ReconnectMessage
   | NotificationMessage
   | SubscribeResponseMessage
+  | UnSubscribeResponseMessage
   | AuthenticateResponseMessage;
 
 interface BaseOutgoingMessage {
@@ -138,6 +151,7 @@ export interface HermesClientEvents {
   reconnect: (message: ReconnectMessage) => void;
   message: (message: NotificationMessage) => void;
   subscribeResponse: (message: SubscribeResponseMessage) => void;
+  unsubscribeResponse: (message: UnSubscribeResponseMessage) => void;
   authenticateResponse: (message: AuthenticateResponseMessage) => void;
   keepalive: (message: KeepaliveMessage) => void;
   unknownMessage: (

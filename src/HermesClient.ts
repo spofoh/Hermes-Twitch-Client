@@ -11,6 +11,7 @@ import type {
   ReconnectMessage,
   NotificationMessage,
   SubscribeResponseMessage,
+  UnSubscribeResponseMessage,
   AuthenticateResponseMessage,
   OutgoingMessage,
   SubscribeRequest,
@@ -431,8 +432,12 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
         this.emit('message', parsedPubsub as NotificationMessage);
         break;
       }
-      case 'subscribeResponse':
+      case 'subscribeResponse': {
         this._handleSubscribeResponse(message as SubscribeResponseMessage);
+        break;
+      }
+      case 'unsubscribeResponse':
+        this.emit('unsubscribeResponse', message as UnSubscribeResponseMessage);
         break;
       case 'authenticateResponse':
         this.emit(
@@ -481,12 +486,17 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
 
   private _handleSubscribeResponse(message: SubscribeResponseMessage): void {
     this.emit('subscribeResponse', message);
-    const subInfo = message.subscribeResponse.subscription;
 
-    if (message.subscribeResponse.result !== 'ok' && subInfo?.id) {
-      const activeSubId = this.activeSubscriptions.get(subInfo?.id);
-      if (activeSubId === subInfo?.id) {
-        this.activeSubscriptions.delete(subInfo?.id);
+    const subinfo = message?.subscribeResponse?.subscription?.id;
+    const errorCode = message?.subscribeResponse?.errorCode;
+
+    if (subinfo && errorCode === 'SUB007') {
+      // Find the topic associated with this subscription ID
+      for (const [topic, subId] of this.activeSubscriptions.entries()) {
+        if (subId === subinfo) {
+          this.activeSubscriptions.delete(topic);
+          break;
+        }
       }
     }
   }
