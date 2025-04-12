@@ -65,27 +65,11 @@ export interface NotificationMessage extends BaseIncomingMessage {
 export interface SubscribeResponseMessage extends BaseIncomingMessage {
   type: 'subscribeResponse';
   subscribeResponse: {
-    result: 'ok' | string;
-    errorCode?: string;
-    error?: string;
+    result: 'ok' | 'error' | string;
+    errorCode?: string | 'SUB004' | 'SUB007';
+    error?: 'unauthorized' | string;
     subscription: {
       id: string;
-      type: string;
-      pubsub?: {
-        topic: string;
-      };
-    };
-    telemetry?: {
-      intervalSeconds: number;
-      variations: Array<{
-        eventHash?: string;
-        filterHash?: string;
-        subjectHash?: string;
-        cellHash?: string;
-      }>;
-    };
-    SUB004?: {
-      existingSubscriptionId: string;
     };
   };
 }
@@ -99,24 +83,12 @@ export interface AuthenticateResponseMessage extends BaseIncomingMessage {
   };
 }
 
-export interface SubscriptionRevocationMessage extends BaseIncomingMessage {
-  type: 'subscriptionRevocation';
-  subscriptionRevocation: {
-    reason: string;
-    subscription: {
-      id: string;
-      type: string;
-    };
-  };
-}
-
 export type IncomingMessage =
   | WelcomeMessage
   | ReconnectMessage
   | NotificationMessage
   | SubscribeResponseMessage
-  | AuthenticateResponseMessage
-  | SubscriptionRevocationMessage;
+  | AuthenticateResponseMessage;
 
 interface BaseOutgoingMessage {
   id: string;
@@ -167,7 +139,6 @@ export interface HermesClientEvents {
   message: (message: NotificationMessage) => void;
   subscribeResponse: (message: SubscribeResponseMessage) => void;
   authenticateResponse: (message: AuthenticateResponseMessage) => void;
-  subscriptionRevocation: (message: SubscriptionRevocationMessage) => void;
   keepalive: (message: KeepaliveMessage) => void;
   unknownMessage: (
     rawMessage: Buffer | ArrayBuffer | Buffer[],

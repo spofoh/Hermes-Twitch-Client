@@ -12,7 +12,6 @@ import type {
   NotificationMessage,
   SubscribeResponseMessage,
   AuthenticateResponseMessage,
-  SubscriptionRevocationMessage,
   OutgoingMessage,
   SubscribeRequest,
   UnsubscribeRequest,
@@ -145,6 +144,8 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
           pubsub: { topic },
         },
       };
+
+      this.activeSubscriptions.set(topic, subscriptionId);
 
       this._sendMessage(message);
     }
@@ -439,11 +440,6 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
           message as AuthenticateResponseMessage
         );
         break;
-      case 'subscriptionRevocation':
-        this._handleSubscriptionRevocation(
-          message as SubscriptionRevocationMessage
-        );
-        break;
       case 'keepalive':
         this.emit('keepalive', message as KeepaliveMessage);
         break;
@@ -486,27 +482,11 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
   private _handleSubscribeResponse(message: SubscribeResponseMessage): void {
     this.emit('subscribeResponse', message);
     const subInfo = message.subscribeResponse.subscription;
-    const topic = subInfo?.pubsub?.topic;
 
-    if (message.subscribeResponse.result === 'ok' && subInfo?.id && topic) {
-      this.activeSubscriptions.set(topic, subInfo.id);
-    } else if (topic) {
-      const activeSubId = this.activeSubscriptions.get(topic);
+    if (message.subscribeResponse.result !== 'ok' && subInfo?.id) {
+      const activeSubId = this.activeSubscriptions.get(subInfo?.id);
       if (activeSubId === subInfo?.id) {
-        this.activeSubscriptions.delete(topic);
-      }
-    }
-  }
-
-  private _handleSubscriptionRevocation(
-    message: SubscriptionRevocationMessage
-  ): void {
-    this.emit('subscriptionRevocation', message);
-    const revokedSubId = message.subscriptionRevocation.subscription.id;
-    for (const [topic, subId] of this.activeSubscriptions.entries()) {
-      if (subId === revokedSubId) {
-        this.activeSubscriptions.delete(topic);
-        break;
+        this.activeSubscriptions.delete(subInfo?.id);
       }
     }
   }
