@@ -1,0 +1,38 @@
+{
+  "name": "twitch-hermes-client",
+  "version": "0.1.0",
+  "description": "A Node.js client for Twitch's unofficial Hermes WebSocket service.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint . --ext .ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "twitch",
+    "hermes",
+    "websocket",
+    "api",
+    "client"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/async-retry": "^1.4.9",
+    "@types/node": "^22.14.1",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.29.1",
+    "@typescript-eslint/parser": "^8.29.1",
+    "eslint": "^9.24.0",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "async-retry": "^1.3.3",
+    "typescript-eslint": "^8.29.1",
+    "ws": "^8.18.1"
+  },
+  "files": [
+    "dist"
+  ]
+}

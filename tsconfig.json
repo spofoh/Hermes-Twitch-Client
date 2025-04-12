@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    /* Base Options: */
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "ES2020", // Node 18 supports up to ES2022, ES2020 is safe
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    /* Strictness */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitAny": true, // Required by user request indirectly
+    "strictNullChecks": true,
+    /* If NOT transpiling code: */
+    "moduleResolution": "node",
+    "module": "CommonJS",
+    "outDir": "./dist",
+    "sourceMap": true,
+    /* If your code runs in the DOM: */
+    // "lib": ["es2022", "dom", "dom.iterable"],
+    /* If you're building for a library: */
+    "declaration": true,
+    /* If you're building for a library in a monorepo: */
+    // "declarationMap": true,
+    /* Sets the root directory of input files. Use to control the output directory structure with --outDir. */
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
