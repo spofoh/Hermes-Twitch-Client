@@ -46,21 +46,14 @@ export interface KeepaliveMessage extends BaseIncomingMessage {
 
 export interface NotificationMessage extends BaseIncomingMessage {
   type: 'notification';
+  id: string;
+  timestamp: string;
   notification: {
     subscription: {
       id: string;
-      type: string;
     };
-    pubsub?: {
-      [key: string]: unknown;
-    };
-    telemetry?: {
-      eventHash?: string;
-      eventIdHash?: string;
-      filterHash?: string;
-      subjectHash?: string;
-      cellHash?: string;
-    };
+    type: string;
+    pubsub?: Record<string, any>;
   };
 }
 
