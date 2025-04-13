@@ -51,7 +51,9 @@ export interface NotificationMessage extends BaseIncomingMessage {
       id: string;
       type: string;
     };
-    pubsub?: string;
+    pubsub?: {
+      [key: string]: unknown;
+    };
     telemetry?: {
       eventHash?: string;
       eventIdHash?: string;

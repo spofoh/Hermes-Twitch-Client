@@ -1,6 +1,6 @@
 {
   "name": "twitch-hermes-client",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A Node.js client for Twitch's unofficial Hermes WebSocket service.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
