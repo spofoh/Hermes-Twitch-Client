@@ -412,14 +412,11 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
         this._handleReconnect(message as ReconnectMessage);
         break;
       case 'notification': {
-        let parsedPubsub = message;
-        if (message.notification.pubsub) {
+        if (message as NotificationMessage) {
           try {
-            parsedPubsub = {
-              ...message,
-              ...message.notification,
-              pubsub: JSON.parse(message.notification.pubsub),
-            };
+            message.notification.pubsub = JSON.parse(
+              message.notification.pubsub
+            );
           } catch (e) {
             this.emit(
               'error',
@@ -429,7 +426,7 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
             );
           }
         }
-        this.emit('message', parsedPubsub as NotificationMessage);
+        this.emit('message', message as NotificationMessage);
         break;
       }
       case 'subscribeResponse': {
