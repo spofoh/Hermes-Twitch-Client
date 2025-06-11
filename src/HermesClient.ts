@@ -120,8 +120,11 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
     return this.connectionState;
   }
 
-  public subscribe(topics: string | string[]): void {
+  public subscribe(
+    topics: string | string[]
+  ): Array<{ topic: string; id: string }> {
     const topicsArray = Array.isArray(topics) ? topics : [topics];
+    const subscriptions: Array<{ topic: string; id: string }> = [];
 
     for (const topic of topicsArray) {
       if (!topic || typeof topic !== 'string') {
@@ -147,9 +150,12 @@ export class HermesClient extends (EventEmitter as new () => TypedEventEmitter<H
       };
 
       this.activeSubscriptions.set(topic, subscriptionId);
+      subscriptions.push({ topic, id: subscriptionId });
 
       this._sendMessage(message);
     }
+
+    return subscriptions;
   }
 
   public unsubscribe(topics: string | string[]): void {
